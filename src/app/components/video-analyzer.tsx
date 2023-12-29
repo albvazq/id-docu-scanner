@@ -1,44 +1,46 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Camera from './camera';
 
-export type VideoAnalyzerBuilder = () => (
-  v: HTMLVideoElement | null
-) => Promise<void> | void;
+export type VideoAnalyzerBuilder = (
+  v: HTMLVideoElement | null,
+  o?: HTMLDivElement | null
+) => () => Promise<void> | void;
 
 export class VideoAnalyzerEngine {
-  private video;
+  private video: HTMLVideoElement | null = null;
+  private overlay: HTMLDivElement | null = null;
   private isFirst = true;
-  private analyzers: ((v: HTMLVideoElement | null) => Promise<void> | void)[] =
+  private _analyzers: ((v: HTMLVideoElement | null) => Promise<void> | void)[] =
     [];
   private stopped = false;
   private isProcessing = false;
   private registeredAnalyzers = new Set();
 
-  constructor(v: HTMLVideoElement | null) {
-    if (v !== null) {
+  constructor(v: HTMLVideoElement | null, o: HTMLDivElement | null) {
+    if (v !== null && o !== null) {
       this.video = v;
+      this.overlay = o;
       this.video.onplay = () => {
         this.runAllAnalyzers();
       };
     }
   }
 
-  add(name: string, analyzer: VideoAnalyzerBuilder) {
-    if (!this.registeredAnalyzers.has(name)) {
-      this.registeredAnalyzers.add(name);
-      if (this.video) {
-        this.analyzers.push(analyzer());
-        this.runAllAnalyzers();
-      }
+  set analyzers(analyzers: VideoAnalyzerBuilder[]) {
+    if (this.video) {
+      console.info(this.video, this.overlay);
+      this._analyzers = analyzers.map((a) => a(this.video, this.overlay));
+      this.runAllAnalyzers();
     }
   }
 
   async runAllAnalyzers() {
-    if (this.analyzers.length > 0 && !this.isProcessing) {
+    if (this._analyzers.length > 0 && !this.isProcessing) {
       const video: HTMLVideoElement | null = document.getElementById(
         'inputVideo'
       ) as unknown as HTMLVideoElement | null;
       this.isProcessing = true;
-      for (const analyzer of this.analyzers) {
+      for (const analyzer of this._analyzers) {
         await analyzer(video);
       }
       this.isProcessing = false;
@@ -49,67 +51,71 @@ export class VideoAnalyzerEngine {
   }
 
   stop() {
-    // requestAnimationFrame(() => {
-    //   this.stopped = true;
-    //   document.getElementById('inputVideo')?.remove();
-    // });
-  }
-
-  async setupCamera() {
-    if (!this.video) return;
-
-    try {
-      const isMobile =
-        /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-          navigator.userAgent
-        );
-      const width = 1200;
-      const height = 675;
-
-      if (isMobile) {
-        this.video.width = height;
-        this.video.height = width;
-      } else {
-        this.video.width = width;
-        this.video.height = height;
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment', // Use the back camera
-          width: { ideal: width },
-          height: { ideal: height },
-          aspectRatio: 16 / 9,
-        },
-      });
-
-      this.video.srcObject = stream;
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-    }
+    requestAnimationFrame(() => {
+      this.stopped = true;
+      document.getElementById('inputVideo')?.remove();
+    });
   }
 }
 
-const createVideoAnalyzer = async () => {
-  if (!document.getElementById('inputVideo')) {
-    const videoElement = document.createElement('video');
-    videoElement.id = 'inputVideo';
-    videoElement.autoplay = true;
-    videoElement.muted = true;
-    videoElement.playsInline = true;
-    videoElement.style.position = 'absolute';
-    videoElement.style.left = '0';
-    videoElement.style.top = '0';
-    // Append video element to the body
-    document.body.appendChild(videoElement);
-    window.videoAnalyzerEngine = new VideoAnalyzerEngine(videoElement);
-    await window.videoAnalyzerEngine.setupCamera();
-  }
-};
+const isMobile =
+  /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
 
-export const VideoAnalyzer = () => {
+export const VideoAnalyzer = ({
+  analyzers,
+  width = 1200,
+  height = 675,
+}: {
+  analyzers: VideoAnalyzerBuilder[];
+  width?: number;
+  height?: number;
+}) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const vWidth = isMobile ? height : width;
+  const vHeight = isMobile ? width : height;
+
+  const [videoAnalyzerEngine, setVideoAnalyzerEngine] = useState<
+    VideoAnalyzerEngine | undefined
+  >();
+
   useEffect(() => {
-    createVideoAnalyzer();
+    if (videoRef.current && overlayRef.current) {
+      const videoAnalyzerEngine = new VideoAnalyzerEngine(
+        videoRef.current,
+        overlayRef.current
+      );
+      setVideoAnalyzerEngine(videoAnalyzerEngine);
+      return () => {
+        videoAnalyzerEngine.stop();
+      };
+    }
   }, []);
-  return null;
+
+  useEffect(() => {
+    if (videoAnalyzerEngine) {
+      videoAnalyzerEngine.analyzers = analyzers;
+    }
+  }, [analyzers, videoAnalyzerEngine]);
+
+  return (
+    <div
+      ref={overlayRef}
+      style={{
+        width: `${vWidth}px`,
+        height: `${vHeight}px`,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        transformOrigin: 'top left',
+        overflow: 'hidden',
+        border: '2px solid red',
+        transform: 'scale(0.7)',
+      }}
+    >
+      <Camera ref={videoRef} height={vHeight} width={vWidth} />
+    </div>
+  );
 };

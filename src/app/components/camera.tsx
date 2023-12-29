@@ -7,30 +7,26 @@ import {
   useState,
 } from 'react';
 
-const setupCamera = async (videoEl: HTMLVideoElement | null) => {
+const isMobile =
+  /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+
+const setupCamera = async (
+  videoEl: HTMLVideoElement | null,
+  width: number,
+  height: number
+) => {
   if (!videoEl) return;
 
   try {
-    const isMobile =
-      /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-        navigator.userAgent
-      );
-    const width = 1200;
-    const height = 675;
-
-    if (isMobile) {
-      videoEl.width = height;
-      videoEl.height = width;
-    } else {
-      videoEl.width = width;
-      videoEl.height = height;
-    }
-
+    videoEl.width = width;
+    videoEl.height = height;
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'environment', // Use the back camera
-        width: { ideal: width },
-        height: { ideal: height },
+        width: { ideal: isMobile ? height : width },
+        height: { ideal: isMobile ? width : height },
         aspectRatio: 16 / 9,
       },
     });
@@ -42,7 +38,10 @@ const setupCamera = async (videoEl: HTMLVideoElement | null) => {
 };
 
 export const Camera = forwardRef(
-  (props, ref: ForwardedRef<HTMLVideoElement | null>) => {
+  (
+    { width, height }: { width: number; height: number },
+    ref: ForwardedRef<HTMLVideoElement | null>
+  ) => {
     const innerRef = useRef<HTMLVideoElement | null>(null);
     const [hasBeenInitialized, setHasBeenInitialized] = useState(false);
 
@@ -54,11 +53,21 @@ export const Camera = forwardRef(
     useEffect(() => {
       if (!hasBeenInitialized && innerRef?.current) {
         setHasBeenInitialized(true);
-        setupCamera(innerRef?.current);
+        setupCamera(innerRef?.current, width, height);
       }
     }, [hasBeenInitialized]);
 
-    return <video ref={innerRef} autoPlay muted playsInline></video>;
+    return (
+      <video
+        width={width}
+        height={height}
+        style={{ border: '2px solid blue', position: 'relative' }}
+        ref={innerRef}
+        autoPlay
+        muted
+        playsInline
+      ></video>
+    );
   }
 );
 

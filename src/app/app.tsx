@@ -1,9 +1,11 @@
 import styled from 'styled-components';
 import {
   VideoAnalyzer,
+  VideoAnalyzerBuilder,
   VideoAnalyzerEngine,
 } from './components/video-analyzer';
 import Script from './components/script';
+import { useState } from 'react';
 
 const StyledApp = styled.div`
   // Your style here
@@ -16,7 +18,24 @@ declare global {
   }
 }
 
-function DocumentAnalyzer() {
+function DocumentAnalyzer(
+  video: HTMLVideoElement | null,
+  o?: HTMLDivElement | null
+) {
+  // const dst = new cv.Mat();
+  const src = new cv.Mat(video?.height, video?.width, cv.CV_8UC4);
+  const capture = new cv.VideoCapture(video);
+  const canvas: HTMLCanvasElement = document.createElement('canvas');
+  // Set canvas width and height to 100%
+  canvas.width = video?.width || 0;
+  canvas.height = video?.height || 0;
+  canvas.style.position = 'absolute';
+  canvas.style.top = '0';
+  canvas.style.left = '0';
+  // Append canvas to the provided div
+  o?.appendChild(canvas);
+  const context = canvas.getContext('2d');
+
   function isDocumentCentered(image: any) {
     // Convert image to grayscale
     const gray = new cv.Mat();
@@ -70,19 +89,18 @@ function DocumentAnalyzer() {
         Math.abs(centerY - imageCenterY) < threshold;
 
       isCentered = isCentered && boundingRect.width > 0.65 * image.cols;
-      console.log(isCentered);
-      // context.clearRect(0, 0, canvas.width, canvas.height);
+      context?.clearRect(0, 0, canvas.width, canvas.height);
       if (isCentered) {
         // Draw a green rectangle around the document
-        //context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        // context.strokeStyle = 'lime';
-        // context.lineWidth = 12;
-        // context.strokeRect(
-        //   boundingRect.x,
-        //   boundingRect.y,
-        //   boundingRect.width,
-        //   boundingRect.height
-        // );
+        context?.drawImage(video!, 0, 0, canvas.width, canvas.height);
+        context!.strokeStyle = 'lime';
+        context!.lineWidth = 12;
+        context?.strokeRect(
+          boundingRect.x,
+          boundingRect.y,
+          boundingRect.width,
+          boundingRect.height
+        );
       }
       // boundingRect.delete();
     }
@@ -94,13 +112,11 @@ function DocumentAnalyzer() {
     hierarchy.delete();
     return isCentered;
   }
-  // const dst = new cv.Mat();
-  return async (video: HTMLVideoElement | null) => {
-    const src = new cv.Mat(video?.height, video?.width, cv.CV_8UC4);
-    const capture = new cv.VideoCapture(video);
+
+  return async () => {
     try {
       capture.read(src);
-      console.log(isDocumentCentered(src));
+      isDocumentCentered(src);
     } catch (err) {
       console.error(err);
     }
@@ -109,16 +125,22 @@ function DocumentAnalyzer() {
 }
 
 export function App() {
+  const [analyzers, setAnalyzers] = useState<VideoAnalyzerBuilder[]>([]);
   return (
     <StyledApp>
       <Script
         src="https://docs.opencv.org/3.4.0/opencv.js"
         onComplete={() => {
-          window.videoAnalyzerEngine.add('DocumentAnalyzer', DocumentAnalyzer);
+          setAnalyzers([DocumentAnalyzer]);
+          // window.videoAnalyzerEngine.add('DocumentAnalyzer', DocumentAnalyzer);
         }}
       />
 
-      <VideoAnalyzer />
+      <VideoAnalyzer
+        analyzers={analyzers}
+        width={(480 / 9) * 16}
+        height={480}
+      />
     </StyledApp>
   );
 }
